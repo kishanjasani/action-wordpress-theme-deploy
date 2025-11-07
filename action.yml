@@ -1,0 +1,26 @@
+name: 'WordPress Theme Deploy'
+description: 'Deploy to the WordPress Theme Repository'
+author: 'Kishan Jasani'
+branding:
+  icon: 'upload-cloud'
+  color: 'purple'
+inputs:
+  generate-zip:
+    description: 'Generate package zip file?'
+    default: 'false'
+  dry-run:
+    description: 'Run the deployment process without committing.'
+    default: 'false'
+outputs:
+  zip-path:
+    description: 'Path to zip file'
+    value: ${{ steps.deploy.outputs.zip-path }}
+runs:
+  using: 'composite'
+  steps:
+    - id: deploy
+      env:
+        INPUT_GENERATE_ZIP: ${{ inputs.generate-zip }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+      run: ${{ github.action_path }}/deploy.sh
+      shell: bash

@@ -1,0 +1,21 @@
+name: Deploy to WordPress.org
+on:
+  push:
+    tags:
+    - "*"
+jobs:
+  tag:
+    name: New tag
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build # Remove or modify this step as needed
+      run: |
+        npm install
+        npm run build
+    - name: WordPress Theme Deploy
+      uses: ./action-wordpress-theme-deploy
+      env:
+        SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+        SLUG: deltra # optional, remove if GitHub repo name matches SVN slug, including capitalization

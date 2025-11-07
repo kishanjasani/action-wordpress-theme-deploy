@@ -1,0 +1,31 @@
+name: Deploy to WordPress.org
+on:
+  release:
+    types: [published]
+jobs:
+  deploy:
+    name: Deploy on release
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: |
+        npm install
+        npm run build
+    - name: WordPress Theme Deploy
+      id: deploy
+      uses: ./action-wordpress-theme-deploy
+      with:
+        generate-zip: true
+      env:
+        SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+    - name: Upload ZIP to release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ${{ steps.deploy.outputs.zip-path }}
+        asset_name: ${{ github.event.repository.name }}.zip
+        asset_content_type: application/zip
