@@ -3,7 +3,7 @@
 # Note that this does not use pipefail
 # because if the grep later doesn't match any deleted files,
 # which is likely to be the case the majority of the time,
-# it does not exit with 0, as we are interested in the final exit.
+# it does not exit with a 0, and we are interested in the final exit.
 set -eo
 
 # Function to check if a command exists
@@ -67,7 +67,6 @@ if [[ -z "$SLUG" ]]; then
 fi
 echo "ℹ︎ SLUG is $SLUG"
 
-# Allow setting custom version number in advanced workflows
 if [[ -z "$VERSION" ]]; then
 	VERSION="${GITHUB_REF#refs/tags/}"
 	VERSION="${VERSION#v}"
@@ -81,12 +80,12 @@ echo "ℹ︎ ASSETS_DIR is $ASSETS_DIR"
 
 if [[ -z "$BUILD_DIR" ]] || [[ $BUILD_DIR == "./" ]]; then
 	BUILD_DIR=false
-elif [[ $BUILD_DIR == ./* ]]; then
+elif [[ $BUILD_DIR == ./* ]]; then 
 	BUILD_DIR=${BUILD_DIR:2}
 fi
 
 if [[ "$BUILD_DIR" != false ]]; then
-	if [[ $BUILD_DIR != /* ]]; then
+	if [[ $BUILD_DIR != /* ]]; then 
 		BUILD_DIR="${GITHUB_WORKSPACE%/}/${BUILD_DIR%/}"
 	fi
 	echo "ℹ︎ BUILD_DIR is $BUILD_DIR"
@@ -95,18 +94,18 @@ fi
 SVN_URL="https://themes.svn.wordpress.org/${SLUG}/"
 SVN_DIR="${HOME}/svn-${SLUG}"
 
-# Checkout SVN repository.
+# Checkout SVN repository
 echo "➤ Checking out .org repository..."
 svn checkout --depth immediates "$SVN_URL" "$SVN_DIR"
 cd "$SVN_DIR"
-svn update --set-depth infinity trunk
 
+# Generate ZIP function
 generate_zip() {
   if $INPUT_GENERATE_ZIP; then
     echo "Generating zip file..."
 
     # use a symbolic link so the directory in the zip matches the slug
-    ln -s "${SVN_DIR}/trunk" "${SVN_DIR}/${SLUG}"
+    ln -s "${SVN_DIR}/${VERSION}" "${SVN_DIR}/${SLUG}"
     zip -r "${GITHUB_WORKSPACE}/${SLUG}.zip" "$SLUG"
     unlink "${SVN_DIR}/${SLUG}"
 
@@ -115,23 +114,14 @@ generate_zip() {
   fi
 }
 
-# Bail early if the theme version is already published.
-# Note: Themes use trunk primarily, but we still tag versions
-if [[ -n "$VERSION" ]] && svn info "^/tags/$VERSION" >/dev/null 2>&1; then
-	echo "ℹ︎ Version $VERSION of theme $SLUG was already published";
-
-	generate_zip
-
-	exit
-fi
-
+# Copy files to version directory
 if [[ "$BUILD_DIR" = false ]]; then
 	echo "➤ Copying files..."
 	if [[ -e "$GITHUB_WORKSPACE/.distignore" ]]; then
 		echo "ℹ︎ Using .distignore"
-		# Copy from current branch to /trunk, excluding dotorg assets
+		# Copy from current branch to version directory, excluding dotorg assets
 		# The --delete flag will delete anything in destination that no longer exists in source
-		rsync -rc --exclude-from="$GITHUB_WORKSPACE/.distignore" "$GITHUB_WORKSPACE/" trunk/ --delete --delete-excluded
+		rsync -rc --exclude-from="$GITHUB_WORKSPACE/.distignore" "$GITHUB_WORKSPACE/" "$VERSION/" --delete --delete-excluded
 	else
 		echo "ℹ︎ Using .gitattributes"
 
@@ -148,7 +138,7 @@ if [[ "$BUILD_DIR" = false ]]; then
 		git config --global user.email "deploy+github@example.com"
 		git config --global user.name "GitHub Deploy Bot"
 
-		# Ensure git archive will pick up any changed files in the directory try.
+		# Ensure git archive will pick up any changed files in the directory.
 		test "$(git ls-files --deleted)" && git rm "$(git ls-files --deleted)"
 		if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
 			git add .
@@ -175,13 +165,13 @@ if [[ "$BUILD_DIR" = false ]]; then
 
 		cd "$SVN_DIR"
 
-		# Copy from clean copy to /trunk, excluding dotorg assets
+		# Copy from clean copy to version directory, excluding dotorg assets
 		# The --delete flag will delete anything in destination that no longer exists in source
-		rsync -rc "$TMP_DIR/" trunk/ --delete --delete-excluded
+		rsync -rc "$TMP_DIR/" "$VERSION/" --delete --delete-excluded
 	fi
 else
 	echo "ℹ︎ Copying files from build directory..."
-	rsync -rc "$BUILD_DIR/" trunk/ --delete --delete-excluded
+	rsync -rc "$BUILD_DIR/" "$VERSION/" --delete --delete-excluded
 fi
 
 # Add everything and commit to SVN
@@ -194,7 +184,7 @@ svn add . --force > /dev/null
 # Also suppress stdout here
 svn status | grep '^\!' | sed 's/! *//' | xargs -I% svn rm %@ > /dev/null
 
-#Resolves => SVN commit failed: Directory out of date
+# Resolves => SVN commit failed: Directory out of date
 svn update
 
 svn status
@@ -202,11 +192,8 @@ svn status
 if $INPUT_DRY_RUN; then
   echo "➤ Dry run: Files not committed."
 else
-  echo "➤ Committing files to trunk..."
+  echo "➤ Committing files..."
   svn commit -m "Update to version $VERSION from GitHub" --no-auth-cache --non-interactive  --username "$SVN_USERNAME" --password "$SVN_PASSWORD"
-  
-  echo "➤ Creating version tag $VERSION..."
-  svn copy "$SVN_URL/trunk" "$SVN_URL/tags/$VERSION" -m "Tagging version $VERSION" --no-auth-cache --non-interactive --username "$SVN_USERNAME" --password "$SVN_PASSWORD"
 fi
 
 generate_zip
