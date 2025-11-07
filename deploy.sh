@@ -202,8 +202,11 @@ svn status
 if $INPUT_DRY_RUN; then
   echo "➤ Dry run: Files not committed."
 else
-  echo "➤ Committing files..."
+  echo "➤ Committing files to trunk..."
   svn commit -m "Update to version $VERSION from GitHub" --no-auth-cache --non-interactive  --username "$SVN_USERNAME" --password "$SVN_PASSWORD"
+  
+  echo "➤ Creating version tag $VERSION..."
+  svn copy "$SVN_URL/trunk" "$SVN_URL/tags/$VERSION" -m "Tagging version $VERSION" --no-auth-cache --non-interactive --username "$SVN_USERNAME" --password "$SVN_PASSWORD"
 fi
 
 generate_zip
