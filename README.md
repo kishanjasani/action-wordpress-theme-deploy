@@ -2,7 +2,40 @@
 
 > Deploy your theme to the WordPress.org repository using GitHub Actions.
 
-This Action commits the contents of your Git tag to the WordPress.org theme repository using the same tag name. It can exclude files as defined in either `.distignore` or `.gitattributes`.
+This Action commits the contents of your Git tag to the WordPress.org theme repository using the same tag name. It can exclude files as defined in either `.distignore` or `.gitattributes`, and optionally generate a ZIP file for your releases.
+
+## Quick Start
+
+Add this workflow to `.github/workflows/deploy.yml` in your theme repository:
+
+```yaml
+name: Deploy to WordPress.org
+on:
+  release:
+    types: [published]
+jobs:
+  deploy:
+    name: Deploy on release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: WordPress Theme Deploy
+      id: deploy
+      uses: kishanjasani/action-wordpress-theme-deploy@main
+      with:
+        generate-zip: true
+      env:
+        SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
+        SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
+    - name: Upload ZIP to release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ steps.deploy.outputs.zip-path }}
+```
+
+Then add your WordPress.org credentials as repository secrets (`WPORG_SVN_USERNAME` and `WPORG_SVN_PASSWORD`) and create a release on GitHub!
 
 ## Configuration
 
@@ -79,11 +112,53 @@ webpack.config.js
 /phpunit.xml export-ignore
 ```
 
-## Example Workflow File
+## Example Workflow Files
 
-To get started, you will want to copy the contents of the example below into `.github/workflows/deploy.yml` and push that to your repository. You are welcome to name the file something else, but it must be in that directory. The usage of `ubuntu-latest` is recommended for compatibility with required dependencies in this Action.
+To get started, you will want to copy the contents of one of the examples below into `.github/workflows/deploy.yml` and push that to your repository. You are welcome to name the file something else, but it must be in that directory. The usage of `ubuntu-latest` is recommended for compatibility with required dependencies in this Action.
+
+### Deploy on creating a GitHub release
+
+This is the **recommended approach** for most themes. It deploys your theme to WordPress.org when you create a release on GitHub and automatically attaches the ZIP file to the release.
+
+```yaml
+name: Deploy to WordPress.org
+on:
+  release:
+    types: [published]
+jobs:
+  deploy:
+    name: Deploy on release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build # Remove or modify this step as needed
+      run: |
+        npm install
+        npm run build
+    - name: WordPress Theme Deploy
+      id: deploy
+      uses: kishanjasani/action-wordpress-theme-deploy@main
+      with:
+        generate-zip: true
+      env:
+        SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
+        SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
+    - name: Upload ZIP to release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ steps.deploy.outputs.zip-path }}
+```
+
+**How to use:**
+1. Create a new tag: `git tag 1.0.0 && git push origin 1.0.0`
+2. Go to your GitHub repository and create a new release from that tag
+3. The action will automatically deploy to WordPress.org and attach the ZIP file to your release
 
 ### Deploy on pushing a new tag
+
+This approach deploys immediately when you push a tag to your repository.
 
 ```yaml
 name: Deploy to WordPress.org
@@ -102,14 +177,22 @@ jobs:
         npm install
         npm run build
     - name: WordPress Theme Deploy
-      uses: ./action-wordpress-theme-deploy
+      uses: kishanjasani/action-wordpress-theme-deploy@main
       env:
-        SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
-        SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
-        SLUG: deltra # optional, remove if GitHub repo name matches SVN slug, including capitalization
+        SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
+        SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
+        SLUG: my-theme-slug # optional, remove if GitHub repo name matches SVN slug, including capitalization
 ```
 
-### Deploy on pushing a new tag and create release with ZIP
+**How to use:**
+```bash
+git tag -a 1.0.0 -m "Version 1.0.0"
+git push origin 1.0.0
+```
+
+### Deploy with ZIP generation and artifact upload
+
+This example deploys to WordPress.org and saves the ZIP file as a GitHub artifact.
 
 ```yaml
 name: Deploy to WordPress.org
@@ -129,44 +212,142 @@ jobs:
         npm run build
     - name: WordPress Theme Deploy
       id: deploy
-      uses: ./action-wordpress-theme-deploy
+      uses: kishanjasani/action-wordpress-theme-deploy@main
       with:
         generate-zip: true
       env:
-        SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
-        SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+        SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
+        SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
     - name: Upload release asset
       uses: actions/upload-artifact@v4
       with:
         name: theme-zip
         path: ${{ steps.deploy.outputs.zip-path }}
-    - name: Create Release
-      uses: ncipollo/release-action@v1
-      with:
-        artifacts: ${{ steps.deploy.outputs.zip-path }}
-        token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+### Dry run for testing
+
+Use this to test your workflow without actually committing to WordPress.org SVN.
+
+```yaml
+name: Test Deploy
+on:
+  push:
+    branches:
+    - develop
+jobs:
+  test:
+    name: Test deployment
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: |
+        npm install
+        npm run build
+    - name: WordPress Theme Deploy (Dry Run)
+      uses: kishanjasani/action-wordpress-theme-deploy@main
+      with:
+        dry-run: true
+        generate-zip: true
+```
+
+**Note:** Dry run doesn't require SVN credentials.
 
 ## Setup Instructions
 
-1. **Create the action directory** in your theme repository (if you want to use it locally) or reference it from a published repository
-2. **Add the workflow file** to `.github/workflows/deploy.yml` in your theme repository
-3. **Add WordPress.org SVN credentials** as secrets in your repository:
-   - Go to your repository Settings > Secrets and variables > Actions
-   - Add `SVN_USERNAME` (your WordPress.org username)
-   - Add `SVN_PASSWORD` (your WordPress.org password)
-4. **Create a tag** to trigger the deployment:
-   ```bash
-   git tag -a 1.0.0 -m "Version 1.0.0"
-   git push origin 1.0.0
-   ```
+### Step 1: Add WordPress.org SVN credentials
+
+Add your WordPress.org credentials as secrets in your repository:
+
+1. Go to your GitHub repository
+2. Click **Settings** > **Secrets and variables** > **Actions**
+3. Click **New repository secret**
+4. Add two secrets:
+   - Name: `WPORG_SVN_USERNAME`, Value: your WordPress.org username
+   - Name: `WPORG_SVN_PASSWORD`, Value: your WordPress.org password
+
+### Step 2: Add the workflow file
+
+Create a file at `.github/workflows/deploy.yml` in your theme repository with one of the example workflows above.
+
+### Step 3: Update your theme version
+
+Before creating a release, make sure your theme's version in `style.css` matches the version you're releasing:
+
+```css
+/*
+Theme Name: My Theme
+Version: 1.0.0
+*/
+```
+
+### Step 4: Create a release
+
+Choose one of these methods:
+
+**Method A: Using GitHub Releases (Recommended)**
+1. Create and push a tag: `git tag 1.0.0 && git push origin 1.0.0`
+2. Go to your repository on GitHub
+3. Click **Releases** > **Create a new release**
+4. Select your tag, add release notes, and publish
+5. The action will automatically deploy and attach the ZIP file
+
+**Method B: Push tag directly**
+```bash
+git tag -a 1.0.0 -m "Version 1.0.0"
+git push origin 1.0.0
+```
+
+### Step 5: Verify deployment
+
+1. Check the **Actions** tab in your GitHub repository to see the workflow status
+2. Once completed, verify your theme on WordPress.org
 
 ## Important Notes
 
-* Your theme must already be approved and exist in the WordPress.org theme directory
-* The `SLUG` must match your theme's slug on WordPress.org exactly
-* Tags should follow semantic versioning (e.g., 1.0.0, 1.0.1, etc.)
-* The version in your `style.css` should match the tag version
+* Your theme **must already be approved** and exist in the WordPress.org theme directory
+* The `SLUG` must match your theme's slug on WordPress.org exactly (if not specified, it uses your GitHub repository name)
+* Tags should follow [semantic versioning](https://semver.org/) (e.g., 1.0.0, 1.0.1, 2.0.0)
+* The version in your `style.css` **must match** the tag version you're releasing
+* When using the `release` trigger, ensure you have `permissions: contents: write` set in your workflow
+
+## Troubleshooting
+
+### Build step needed?
+
+If your theme requires compilation (Sass, JavaScript bundling, etc.), add a build step before the deploy step:
+
+```yaml
+- name: Build
+  run: |
+    npm install
+    npm run build
+```
+
+If your theme doesn't need building, remove this step entirely.
+
+### Using a different repository slug?
+
+If your GitHub repository name doesn't match your WordPress.org theme slug, set the `SLUG` environment variable:
+
+```yaml
+env:
+  SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
+  SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
+  SLUG: my-wordpress-theme
+```
+
+### Want to test without deploying?
+
+Use the `dry-run` option to test your workflow:
+
+```yaml
+with:
+  dry-run: true
+```
+
+This doesn't require SVN credentials and won't commit anything to WordPress.org.
 
 ## License
 
