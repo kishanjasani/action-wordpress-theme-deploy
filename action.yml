@@ -1,4 +1,4 @@
-name: 'WordPress Theme Deploy'
+name: 'WP Theme Auto Deploy'
 description: 'Deploy to the WordPress Theme Repository'
 author: 'Kishan Jasani'
 branding:
